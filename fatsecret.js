@@ -50,6 +50,9 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   await page.goto(url, { waitUntil: "domcontentloaded" });
 
   while (true) {
+    const start = Date.now();
+    let processedPages = 0;
+
     if (currentPage > initialPage) {
       const url = `${baseUrl}&pg=${currentPage}`;
       await page.goto(url, { waitUntil: "domcontentloaded" });
@@ -59,6 +62,11 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const count = await page.$$eval(".generic.searchResult tr", (e) => e.length);
     const foods = [];
     const result = [];
+
+    if (count === 0) {
+      console.log(`Selesai dipage ${currentPage}`);
+      break;
+    }
 
     // get all food
     for (let i = 0; i < count; i++) {
@@ -133,6 +141,19 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const filename = path.join(outputDir, `food_nutrition_${currentPage}.json`);
     fs.writeFileSync(filename, JSON.stringify(result, null, 2), "utf-8");
     console.log(`Saved: ${filename}`);
+
+    // setelah setiap halaman selesai
+    processedPages += 1;
+    const elapsedMs = Date.now() - start;
+    const avgMsPerPage = elapsedMs / processedPages;
+
+    // misal saat ini currentPage = 120
+    const targetPage = 999;
+    const pagesLeft = Math.max(targetPage - currentPage, 0);
+    const remainingMs = pagesLeft * avgMsPerPage;
+    const remainingMinutes = remainingMs / 60000;
+
+    console.log(`Estimasi selesai ~${remainingMinutes.toFixed(1)} menit lagi.`);
 
     // next page
     currentPage++;
