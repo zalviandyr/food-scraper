@@ -5,15 +5,16 @@ const path = require("path");
 const baseUrl = "https://www.fatsecret.co.id/kalori-gizi/search?q=a";
 const outputDir = path.join(__dirname, "food_nutrition_chunks");
 
-async function gotoWithRetry(page, url, maxRetry = 3) {
+async function gotoWithRetry(page, url, callback) {
+  const maxRetry = 3;
   for (let attempt = 1; attempt <= maxRetry; attempt++) {
     try {
       await page.goto(url, { waitUntil: "domcontentloaded" });
-      await page.waitForSelector(".nutrition_facts.international");
+      await callback();
 
       return;
     } catch (err) {
-      if (err.message.includes("429") && attempt < maxRetry) {
+      if (attempt < maxRetry) {
         const delay = 5000 * attempt;
         await sleep(delay);
       } else {
@@ -55,7 +56,9 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
     if (currentPage > initialPage) {
       const url = `${baseUrl}&pg=${currentPage}`;
-      await page.goto(url, { waitUntil: "domcontentloaded" });
+      await gotoWithRetry(page, url, async () => {
+        await page.waitForSelector(".generic.searchResult");
+      });
     }
 
     await page.waitForSelector(".generic.searchResult");
@@ -93,7 +96,9 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       const url = food.link;
 
       await sleep(1000);
-      await gotoWithRetry(page, url);
+      await gotoWithRetry(page, url, async () => {
+        await page.waitForSelector(".nutrition_facts.international");
+      });
 
       const nutrition = await page.$eval(".nutrition_facts.international", (root) => {
         const servingSize =
@@ -101,11 +106,13 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
         const nutrients = [];
         let currentParent = null;
+        let lastMajorLabel = null;
 
         Array.from(
           root.querySelectorAll(".nutrient.left, .nutrient.black.left, .nutrient.sub.left")
         ).forEach((leftEl) => {
-          const label = leftEl.textContent.trim();
+          const rawLabel = leftEl.textContent.trim();
+          const label = rawLabel || lastMajorLabel;
           const valueEl = leftEl.nextElementSibling;
           const value =
             valueEl && valueEl.classList.contains("right") ? valueEl.textContent.trim() : null;
@@ -113,7 +120,9 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
           const isSub = leftEl.classList.contains("sub");
           if (!isSub) {
+            lastMajorLabel = label;
             if (label.toLowerCase() === "energi" && value.toLowerCase().includes("kj")) return;
+
             currentParent = { label, value, children: [] };
             nutrients.push(currentParent);
           } else if (currentParent) {
