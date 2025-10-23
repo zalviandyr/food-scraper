@@ -3,11 +3,14 @@ const fs = require("fs");
 const path = require("path");
 
 const baseUrl = "https://www.fatsecret.co.id/kalori-gizi/search?q=a";
+const outputDir = path.join(__dirname, "food_nutrition_chunks");
 
 async function gotoWithRetry(page, url, maxRetry = 3) {
   for (let attempt = 1; attempt <= maxRetry; attempt++) {
     try {
       await page.goto(url, { waitUntil: "domcontentloaded" });
+      await page.waitForSelector(".nutrition_facts.international");
+
       return;
     } catch (err) {
       if (err.message.includes("429") && attempt < maxRetry) {
@@ -20,11 +23,26 @@ async function gotoWithRetry(page, url, maxRetry = 3) {
   }
 }
 
+function resolveStartPage() {
+  if (!fs.existsSync(outputDir)) return 0;
+
+  const files = fs
+    .readdirSync(outputDir)
+    .map((name) => {
+      const match = name.match(/^food_nutrition_(\d+)\.json$/);
+      return match ? Number(match[1]) : null;
+    })
+    .filter((n) => Number.isInteger(n));
+
+  if (files.length === 0) return 0;
+  return Math.max(...files) + 1; // lanjutkan setelah file terakhir
+}
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 (async () => {
   const initialPage = 0;
-  let currentPage = 20;
+  let currentPage = resolveStartPage();
   const url = `${baseUrl}&pg=${initialPage}`;
   const browser = await puppeteer.launch({ headless: true });
   const page = await browser.newPage();
@@ -48,10 +66,14 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       const row = rows[i];
 
       const food = await row.evaluate((e) => {
-        const link = e.querySelector("a").href;
-        const title = e.querySelector("a").textContent.trim();
+        const nameAnchor = e.querySelector("a.prominent");
+        const brandAnchor = e.querySelector("a.brand");
 
-        return { link, title };
+        return {
+          name: nameAnchor?.textContent.trim() || null,
+          brand: brandAnchor?.textContent.replace(/[()]/g, "").trim() || null,
+          link: nameAnchor.href,
+        };
       });
 
       foods.push(food);
@@ -62,9 +84,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       const food = foods[i];
       const url = food.link;
 
-      await sleep(1000 + Math.random() * 2000);
+      await sleep(1000);
       await gotoWithRetry(page, url);
-      await page.waitForSelector(".nutrition_facts.international");
 
       const nutrition = await page.$eval(".nutrition_facts.international", (root) => {
         const servingSize =
@@ -105,7 +126,6 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       });
     }
 
-    const outputDir = path.join(__dirname, "food_nutrition_chunks");
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir);
     }
