@@ -2,10 +2,12 @@ const puppeteer = require("puppeteer");
 const fs = require("fs");
 const path = require("path");
 
-const baseUrl = "https://www.fatsecret.co.id/kalori-gizi/search?q=a";
+const environment = process.env.NODE_ENV;
+const isProduction = environment === "production";
+
 const outputDir = path.join(__dirname, "food_nutrition_chunks");
 
-async function gotoWithRetry(page, url, callback) {
+const gotoWithRetry = async (page, url, callback) => {
   const maxRetry = 3;
   for (let attempt = 1; attempt <= maxRetry; attempt++) {
     try {
@@ -22,13 +24,14 @@ async function gotoWithRetry(page, url, callback) {
       }
     }
   }
-}
+};
 
-function resolveStartPage() {
-  if (!fs.existsSync(outputDir)) return 0;
+const resolveStartPage = (letter) => {
+  const savedDir = path.join(outputDir, letter);
+  if (!fs.existsSync(savedDir)) return 0;
 
   const files = fs
-    .readdirSync(outputDir)
+    .readdirSync(savedDir)
     .map((name) => {
       const match = name.match(/^food_nutrition_(\d+)\.json$/);
       return match ? Number(match[1]) : null;
@@ -37,15 +40,21 @@ function resolveStartPage() {
 
   if (files.length === 0) return 0;
   return Math.max(...files) + 1; // lanjutkan setelah file terakhir
-}
+};
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-(async () => {
+const execute = async (letter) => {
+  const baseUrl = `https://www.fatsecret.co.id/kalori-gizi/search?q=${letter}`;
+
   const initialPage = 0;
-  let currentPage = resolveStartPage();
+  let currentPage = resolveStartPage(letter);
   const url = `${baseUrl}&pg=${initialPage}`;
-  const browser = await puppeteer.launch({ headless: true });
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    ...(isProduction && { executablePath: process.env.CHROMIUM_PATH }),
+  });
   const page = await browser.newPage();
 
   await page.goto(url, { waitUntil: "domcontentloaded" });
@@ -143,11 +152,12 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       });
     }
 
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir);
+    const savedDir = path.join(outputDir, letter);
+    if (!fs.existsSync(savedDir)) {
+      fs.mkdirSync(savedDir, { recursive: true });
     }
 
-    const filename = path.join(outputDir, `food_nutrition_${currentPage}.json`);
+    const filename = path.join(savedDir, `food_nutrition_${currentPage}.json`);
     fs.writeFileSync(filename, JSON.stringify(result, null, 2), "utf-8");
     console.log(`Saved: ${filename}`);
 
@@ -169,4 +179,15 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   await browser.close();
+};
+
+(async () => {
+  const letter = "abcdefghijklmnopqrstuvwxyz";
+  const letters = letter.split("");
+
+  for (let i = 0; i < letters.length; i++) {
+    const element = letters[i];
+
+    await execute(element);
+  }
 })();
