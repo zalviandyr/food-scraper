@@ -12,7 +12,9 @@ const gotoWithRetry = async (page, url, callback) => {
   for (let attempt = 1; attempt <= maxRetry; attempt++) {
     try {
       await page.goto(url, { waitUntil: "domcontentloaded" });
-      if (callback) await callback();
+      if (callback) {
+        await callback();
+      }
 
       return;
     } catch (err) {
