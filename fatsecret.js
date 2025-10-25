@@ -91,10 +91,12 @@ const execute = async (letter) => {
 
     if (currentPage > initialPage) {
       const url = `${baseUrl}&pg=${currentPage}`;
-      await gotoWithRetry(page, url);
+      await gotoWithRetry(page, url, async () => {
+        await page.waitForSelector(".generic");
+      });
     }
 
-    const count = await page.$$eval(".generic.searchResult tr", (e) => e.length);
+    const count = await page.$$eval(".generic.searchResult tr", (e) => e.length ?? 0);
     const foods = [];
     const result = [];
 
