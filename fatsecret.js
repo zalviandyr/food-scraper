@@ -42,6 +42,32 @@ const resolveStartPage = (letter) => {
   return Math.max(...files) + 1; // lanjutkan setelah file terakhir
 };
 
+const resolveStartLetter = (letters) => {
+  let lastWithData = -1;
+
+  for (let i = 0; i < letters.length; i++) {
+    const letter = letters[i];
+    const savedDir = path.join(outputDir, letter);
+    const hasDir = fs.existsSync(savedDir);
+
+    if (!hasDir) {
+      return lastWithData >= 0 ? lastWithData : i;
+    }
+
+    const hasFiles = fs
+      .readdirSync(savedDir)
+      .some((name) => /^food_nutrition_(\d+)\.json$/.test(name));
+
+    if (!hasFiles) {
+      return i;
+    }
+
+    lastWithData = i;
+  }
+
+  return lastWithData === letters.length - 1 ? letters.length : lastWithData;
+};
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const execute = async (letter) => {
@@ -181,8 +207,9 @@ const execute = async (letter) => {
 (async () => {
   const letter = "aiueo";
   const letters = letter.split("");
+  const startIndex = resolveStartLetter(letters);
 
-  for (let i = 0; i < letters.length; i++) {
+  for (let i = startIndex; i < letters.length; i++) {
     const element = letters[i];
 
     await execute(element);
