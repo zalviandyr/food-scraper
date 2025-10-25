@@ -12,7 +12,7 @@ const gotoWithRetry = async (page, url, callback) => {
   for (let attempt = 1; attempt <= maxRetry; attempt++) {
     try {
       await page.goto(url, { waitUntil: "domcontentloaded" });
-      await callback();
+      if (callback) await callback();
 
       return;
     } catch (err) {
@@ -51,7 +51,7 @@ const execute = async (letter) => {
   let currentPage = resolveStartPage(letter);
   const url = `${baseUrl}&pg=${initialPage}`;
   const browser = await puppeteer.launch({
-    headless: true,
+    headless: isProduction,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
     ...(isProduction && { executablePath: process.env.CHROMIUM_PATH }),
   });
@@ -65,18 +65,15 @@ const execute = async (letter) => {
 
     if (currentPage > initialPage) {
       const url = `${baseUrl}&pg=${currentPage}`;
-      await gotoWithRetry(page, url, async () => {
-        await page.waitForSelector(".generic.searchResult");
-      });
+      await gotoWithRetry(page, url);
     }
 
-    await page.waitForSelector(".generic.searchResult");
     const count = await page.$$eval(".generic.searchResult tr", (e) => e.length);
     const foods = [];
     const result = [];
 
     if (count === 0) {
-      console.log(`Selesai dipage ${currentPage}`);
+      console.log(`Selesai page: ${currentPage}, letter: ${letter}`);
       break;
     }
 
@@ -182,7 +179,7 @@ const execute = async (letter) => {
 };
 
 (async () => {
-  const letter = "abcdefghijklmnopqrstuvwxyz";
+  const letter = "aiueo";
   const letters = letter.split("");
 
   for (let i = 0; i < letters.length; i++) {
